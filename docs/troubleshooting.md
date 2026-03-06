@@ -2,7 +2,13 @@
 
 ## The Attach Pattern (90% of Game Day Issues)
 
-Most broken infrastructure comes from **resources that exist but aren't connected**.
+Most broken infrastructure comes from **resources that exist but aren't connected**. This is the single most important concept for Game Day.
+
+AWS is designed as a set of independent services. A VPC, a route table, a security group, a load balancer -- each one is created independently. They don't automatically know about each other. You have to explicitly tell AWS how they connect: "this route table belongs to this VPC," "this security group attaches to these instances," "this ASG registers with this target group."
+
+This means you can have a perfectly configured route table sitting in your account doing absolutely nothing because it was never associated with a subnet. Terraform will happily create it, report success, and move on. There's no error -- the resource exists, it's just not wired up.
+
+When debugging, resist the urge to recreate resources. Instead, check the connections between them. Nine times out of ten, every piece exists -- they're just not attached to each other.
 
 ### Checklist: Is Everything Attached?
 
@@ -72,30 +78,44 @@ resource "aws_autoscaling_group" "web" {
 
 ## Debugging Commands
 
+These commands follow the debugging sequence: verify your identity, then check each layer from the outside in. During Game Day, you'll use these constantly. The `--query` flag filters AWS JSON output to show only what matters -- without it, you get walls of text.
+
 ```bash
-# Check current AWS identity
+# 1. IDENTITY -- Confirm you're using the right account and region.
+#    If this fails, nothing else will work.
 aws sts get-caller-identity
 
-# List running EC2 instances
+# 2. EC2 INSTANCES -- Are your instances actually running?
+#    Look for State=running and check that PublicIpAddress is not null.
+#    If IP is null, the subnet may be missing map_public_ip_on_launch.
 aws ec2 describe-instances --filters "Name=tag:Name,Values=gameday-prep" --query "Reservations[].Instances[].{ID:InstanceId,State:State.Name,IP:PublicIpAddress}"
 
-# Check load balancer status
+# 3. LOAD BALANCER -- Is the ALB active and internet-facing?
+#    Check Scheme (should be "internet-facing", not "internal") and
+#    State.Code (should be "active").
 aws elbv2 describe-load-balancers --names gameday-prep-alb
 
-# Check target group health
+# 4. TARGET HEALTH -- Are instances registered and healthy?
+#    "healthy" = good. "unhealthy" = security group blocking port 80 or
+#    nginx not running. "unused" = no traffic yet (wait a minute).
+#    "draining" = instance being removed. Empty list = ASG not attached.
 aws elbv2 describe-target-health --target-group-arn <target-group-arn>
 
-# Check VPC and subnets
+# 5. NETWORKING -- Check VPC and subnet configuration.
+#    Verify the VPC has the right CIDR and subnets are in different AZs.
 aws ec2 describe-vpcs --filters "Name=tag:Name,Values=gameday-prep"
 aws ec2 describe-subnets --filters "Name=tag:Name,Values=gameday-prep"
 
-# Check route tables
+# 6. ROUTING -- Does the route table have 0.0.0.0/0 -> igw?
+#    If the only route is "local", there's no internet path.
 aws ec2 describe-route-tables --filters "Name=tag:Name,Values=gameday-prep"
 
-# Check security groups
+# 7. SECURITY GROUPS -- Check both ingress AND egress rules.
+#    Missing egress is the silent killer -- no error, just timeouts.
 aws ec2 describe-security-groups --filters "Name=tag:Name,Values=gameday-prep"
 
-# Terraform state inspection
+# 8. TERRAFORM STATE -- See what Terraform thinks exists.
+#    If a resource is missing from this list, Terraform didn't create it.
 terraform state list
 terraform state show aws_vpc.main
 terraform state show aws_autoscaling_group.web
