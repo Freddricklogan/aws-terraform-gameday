@@ -2,7 +2,24 @@
 
 ## Three-Tier Web Application on AWS with Terraform
 
-This repository contains Terraform Infrastructure as Code (IaC) for deploying a complete three-tier web application on AWS. Built in preparation for the **AWS & IBM Terraform Game Day** (March 13, 2026) at Illinois Institute of Technology.
+This repository contains Terraform Infrastructure as Code (IaC) for deploying a complete three-tier web application on AWS. Built in preparation for the **AWS & HashiCorp Terraform Game Day** (March 13, 2026) at Illinois Institute of Technology.
+
+Includes production-ready Terraform configs, 6 hands-on troubleshooting challenges with solutions, reference documentation, and automation scripts.
+
+---
+
+## Table of Contents
+
+- [Architecture Overview](#architecture-overview)
+- [What Gets Deployed](#what-gets-deployed)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+- [Practice Challenges](#practice-challenges)
+- [Project Structure](#project-structure)
+- [Key Concepts](#key-concepts)
+- [Game Day Tips](#game-day-tips)
+- [Documentation](#documentation)
+- [References](#references)
 
 ---
 
@@ -54,83 +71,118 @@ This repository contains Terraform Infrastructure as Code (IaC) for deploying a 
 ## Prerequisites
 
 - AWS Account with billing budget set ($20 recommended)
-- AWS CLI installed and configured
-- Terraform installed (v1.5+)
-- VS Code with HashiCorp HCL and Terraform autocomplete extensions
+- AWS CLI installed and configured ([setup script](scripts/setup-aws-cli.sh))
+- Terraform installed v1.5+ ([setup script](scripts/setup-terraform.sh))
+- VS Code with HashiCorp HCL and Terraform extensions
 - Linux environment (Ubuntu VM via Parallels, VirtualBox, or WSL)
+
+See [docs/setup-guide.md](docs/setup-guide.md) for detailed step-by-step instructions.
 
 ## Quick Start
 
 ```bash
-# 1. Clone this repository
+# Clone and enter the repo
 git clone https://github.com/Freddricklogan/aws-terraform-gameday.git
 cd aws-terraform-gameday
 
-# 2. Configure AWS credentials
+# Configure AWS credentials
 aws configure
 # Enter: Access Key, Secret Key, Region (us-east-2), Output format (json)
 
-# 3. Initialize Terraform (downloads AWS provider libraries)
-terraform init
+# Run pre-flight checks
+bash scripts/validate.sh
 
-# 4. Validate syntax
-terraform validate
+# Deploy infrastructure
+make init
+make plan
+make apply    # Type 'yes' when prompted (~2-3 minutes)
 
-# 5. Preview what will be created
-terraform plan
+# Visit the load balancer URL from the output
+terraform output load_balancer_dns
 
-# 6. Deploy infrastructure
-terraform apply
-# Type 'yes' when prompted (~2-3 minutes to complete)
-
-# 7. Access your application
-# The load balancer DNS will be output after apply completes
-# Visit: http://<load-balancer-dns>
-
-# 8. IMPORTANT: Destroy when done (avoid charges)
-terraform destroy
-# Type 'yes' when prompted
+# IMPORTANT: Destroy when done to avoid charges
+make destroy  # Type 'yes' when prompted
 ```
+
+Or use individual Terraform commands:
+
+```bash
+terraform init       # Download providers
+terraform validate   # Check syntax
+terraform plan       # Preview changes
+terraform apply      # Deploy
+terraform destroy    # Tear down
+```
+
+## Practice Challenges
+
+6 progressive troubleshooting challenges that mirror real Game Day scenarios. Each contains intentionally broken Terraform code with bugs to find and fix.
+
+| # | Challenge | Difficulty | Bugs | Skills Tested |
+|---|-----------|------------|------|---------------|
+| 1 | [Fix Routing](challenges/challenge-01-fix-routing.tf) | Beginner | 2 | Route tables, subnet associations |
+| 2 | [Fix Security](challenges/challenge-02-fix-security.tf) | Beginner | 2 | Security groups, ingress/egress rules |
+| 3 | [Fix Auto Scaling](challenges/challenge-03-fix-autoscaling.tf) | Intermediate | 2 | ASG health checks, ALB attachment |
+| 4 | [Fix Launch Template](challenges/challenge-04-fix-launch-template.tf) | Intermediate | 2 | user_data, security group assignment |
+| 5 | [Fix Load Balancer](challenges/challenge-05-fix-load-balancer.tf) | Intermediate | 2 | ALB internal/external, listener config |
+| 6 | [Full Stack Debug](challenges/challenge-06-full-debug.tf) | Advanced | 4 | All of the above combined |
+
+Solutions are in [solutions/](solutions/) -- try the challenges first before looking.
 
 ## Project Structure
 
 ```
 aws-terraform-gameday/
-├── main.tf                 # Core infrastructure (VPC, subnets, ASG, ALB)
-├── provider.tf             # AWS provider configuration
-├── variables.tf            # Variable definitions
-├── terraform.tfvars        # Variable values (region, instance type, tags)
-├── outputs.tf              # Output values (load balancer URL, VPC ID, etc.)
-├── install-env.sh          # EC2 bootstrap script (installs nginx)
+├── main.tf                  # Core infrastructure (VPC, subnets, ASG, ALB)
+├── provider.tf              # AWS provider configuration
+├── variables.tf             # Variable definitions (8 configurable params)
+├── terraform.tfvars         # Variable values (region, instance type, tags)
+├── outputs.tf               # Output values (load balancer URL, VPC ID, etc.)
+├── install-env.sh           # EC2 bootstrap script (installs nginx)
+├── Makefile                 # Workflow shortcuts (make plan, make apply, etc.)
+├── .gitignore               # Excludes state files, .terraform/, IDE files
+│
 ├── docs/
-│   ├── setup-guide.md      # Detailed environment setup instructions
-│   ├── aws-concepts.md     # Key AWS concepts for Game Day
-│   ├── terraform-guide.md  # Terraform syntax and commands reference
-│   ├── troubleshooting.md  # Common issues and debugging techniques
-│   └── gameday-prep.md     # Game Day strategy and tips
+│   ├── setup-guide.md       # Step-by-step environment setup
+│   ├── aws-concepts.md      # Core AWS concepts explained
+│   ├── terraform-guide.md   # Terraform syntax and commands reference
+│   ├── troubleshooting.md   # Common issues and debugging techniques
+│   ├── gameday-prep.md      # Game Day strategy, timeline, and tips
+│   └── cheat-sheet.md       # Printable quick-reference card
+│
 ├── challenges/
-│   ├── challenge-01-fix-routing.tf      # Practice: broken route table
-│   ├── challenge-02-fix-security.tf     # Practice: misconfigured security group
-│   └── challenge-03-fix-autoscaling.tf  # Practice: broken ASG attachment
+│   ├── challenge-01-fix-routing.tf        # Broken route table
+│   ├── challenge-02-fix-security.tf       # Misconfigured security group
+│   ├── challenge-03-fix-autoscaling.tf    # Broken ASG/ALB connection
+│   ├── challenge-04-fix-launch-template.tf # Missing user_data and SG
+│   ├── challenge-05-fix-load-balancer.tf  # Internal ALB + wrong port
+│   └── challenge-06-full-debug.tf         # Multi-issue boss challenge
+│
+├── solutions/
+│   ├── challenge-01-solution.md   # Routing fix explained
+│   ├── challenge-02-solution.md   # Security fix explained
+│   ├── challenge-03-solution.md   # Auto scaling fix explained
+│   ├── challenge-04-solution.md   # Launch template fix explained
+│   ├── challenge-05-solution.md   # Load balancer fix explained
+│   └── challenge-06-solution.md   # Full debug walkthrough
+│
 └── scripts/
-    ├── setup-aws-cli.sh    # AWS CLI installation script
-    └── setup-terraform.sh  # Terraform installation script
+    ├── setup-aws-cli.sh     # AWS CLI installation (Ubuntu/Debian)
+    ├── setup-terraform.sh   # Terraform installation (Ubuntu/Debian)
+    ├── validate.sh          # Pre-flight environment checker
+    └── destroy.sh           # Safe infrastructure teardown
 ```
 
 ## Key Concepts
 
-### Declarative vs Functional
+### Declarative Infrastructure
 Terraform is **declarative**: you describe *what* you want, not *how* to build it. Terraform figures out the order, dependencies, and execution plan automatically.
 
-### Resource Blocks
 ```hcl
 resource "aws_vpc" "main" {    # Creates infrastructure
   cidr_block = "10.0.0.0/16"
 }
-```
 
-### Data Blocks
-```hcl
 data "aws_ami" "ubuntu" {      # Queries existing information
   most_recent = true
   owners      = ["099720109477"]
@@ -138,30 +190,62 @@ data "aws_ami" "ubuntu" {      # Queries existing information
 ```
 
 ### The Attach Pattern
-Most Game Day issues involve **forgetting to attach resources**:
-- Route table exists but not associated with subnets
-- Security group exists but not attached to instances
-- Load balancer exists but not connected to target group
-- Egress rule missing (traffic goes in, never comes back)
+
+Most Game Day issues involve **resources that exist but aren't connected**:
+
+| Symptom | Missing Attachment |
+|---------|--------------------|
+| Can't reach instances | Route table not associated with subnets |
+| Requests time out silently | Security group missing egress rule |
+| ALB returns 503 | ASG not attached to target group |
+| Instances unhealthy | Launch template missing security group |
+| 504 Gateway Timeout | ALB set to internal or listener on wrong port |
+
+### Debugging Sequence
+
+When something doesn't work, check in this order:
+
+1. **Routing** -- Is there a path from the internet to the VPC?
+2. **Security** -- Are the right ports open in both directions?
+3. **Compute** -- Are instances running with the right config?
+4. **Load Balancing** -- Is the ALB connected to healthy targets?
+
+See [docs/cheat-sheet.md](docs/cheat-sheet.md) for a printable quick-reference.
 
 ## Game Day Tips
 
-1. **Bookmark the Terraform AWS Provider docs**: https://registry.terraform.io/providers/hashicorp/aws/latest/docs
-2. **Check attachments first** -- 90% of issues are unattached resources
-3. **Don't forget egress rules** -- ingress without egress = silent failure
-4. **Use `terraform plan`** before `terraform apply` to preview changes
-5. **Tag everything** for easy identification
-6. **Read error messages carefully** -- Terraform tells you exactly what's wrong
+1. **Check attachments first** -- 90% of issues are unattached resources
+2. **Don't forget egress rules** -- ingress without egress = silent failure
+3. **Use `terraform plan`** before `terraform apply` to preview changes
+4. **Read error messages carefully** -- Terraform tells you exactly what's wrong
+5. **Tag everything** for easy identification in the AWS Console
+6. **Work as a team** -- divide and conquer: one person on networking, one on compute
+7. **Use AI tools when stuck** -- you're allowed and encouraged to
+8. **Stay calm** -- it's applied troubleshooting, not an exam
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Setup Guide](docs/setup-guide.md) | AWS account, CLI, Terraform, and VS Code setup |
+| [AWS Concepts](docs/aws-concepts.md) | VPC, subnets, security groups, ALB, ASG explained |
+| [Terraform Guide](docs/terraform-guide.md) | Commands, block types, references, loops |
+| [Troubleshooting](docs/troubleshooting.md) | The attach pattern, common errors, debug commands |
+| [Game Day Prep](docs/gameday-prep.md) | Event details, study plan, bookmarks |
+| [Cheat Sheet](docs/cheat-sheet.md) | Printable quick-reference for commands and checks |
 
 ## References
 
-- [AWS CLI Getting Started](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)
 - [Terraform AWS Provider Documentation](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
-- [Terraform Language Reference](https://developer.hashicorp.com/terraform/language/providers)
-- [Course Reference Code (itmo-463)](https://github.com/illinoistech-itm/jhajek/tree/master/itmt-430)
+- [Terraform Language Reference](https://developer.hashicorp.com/terraform/language)
+- [AWS VPC User Guide](https://docs.aws.amazon.com/vpc/latest/userguide/)
+- [AWS EC2 Documentation](https://docs.aws.amazon.com/ec2/)
+- [AWS ALB Documentation](https://docs.aws.amazon.com/elasticloadbalancing/)
+- [AWS CLI Command Reference](https://docs.aws.amazon.com/cli/latest/reference/)
+- [Course Reference (ITMT-430)](https://github.com/illinoistech-itm/jhajek/tree/master/itmt-430)
 
 ## Author
 
-**Freddrick Logan** -- Illinois Institute of Technology
+**Freddrick Logan** -- Illinois Institute of Technology, ITMT-430
 - [GitHub](https://github.com/Freddricklogan)
 - [Portfolio](https://github.com/Freddricklogan/freddricklogan)
