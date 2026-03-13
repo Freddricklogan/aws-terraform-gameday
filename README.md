@@ -1,10 +1,10 @@
-# AWS Terraform Infrastructure -- Game Day Preparation
+# AWS Terraform Infrastructure -- Game Day
 
 ## Three-Tier Web Application on AWS with Terraform
 
-This repository contains Terraform Infrastructure as Code (IaC) for deploying a complete three-tier web application on AWS. Built in preparation for the **AWS & HashiCorp Terraform Game Day** (March 13, 2026) at Illinois Institute of Technology.
+This repository contains Terraform Infrastructure as Code (IaC) for deploying a complete three-tier web application on AWS. Built for the **AWS & HashiCorp Terraform Game Day** (March 13, 2026) at Illinois Institute of Technology.
 
-Includes production-ready Terraform configs, 6 hands-on troubleshooting challenges with solutions, reference documentation, and automation scripts.
+Includes production-ready Terraform configs, 6 hands-on troubleshooting challenges with solutions, reference documentation, automation scripts, and [documented results](#game-day-results----march-13-2026) from the live competition.
 
 ---
 
@@ -18,6 +18,7 @@ Includes production-ready Terraform configs, 6 hands-on troubleshooting challeng
 - [Project Structure](#project-structure)
 - [Key Concepts](#key-concepts)
 - [Game Day Tips](#game-day-tips)
+- [Game Day Results](#game-day-results----march-13-2026)
 - [Documentation](#documentation)
 - [References](#references)
 
@@ -233,6 +234,42 @@ See [docs/cheat-sheet.md](docs/cheat-sheet.md) for a printable quick-reference.
 | [Troubleshooting](docs/troubleshooting.md) | The attach pattern, common errors, debug commands |
 | [Game Day Prep](docs/gameday-prep.md) | Event details, study plan, bookmarks |
 | [Cheat Sheet](docs/cheat-sheet.md) | Printable quick-reference for commands and checks |
+
+## Game Day Results -- March 13, 2026
+
+Successfully competed in the **AWS GameDay with Terraform** hosted by Illinois Tech's College of Computing. Completed all quests and applied real-world Terraform troubleshooting under time pressure.
+
+### Intro to Terraform with HashiCorp (HashiCafe Quest)
+
+| Task | Challenge | Resolution | Points |
+|------|-----------|------------|--------|
+| 1 | Configure remote state with S3 | Added S3 backend block to `terraform.tf`, ran `terraform init` to migrate state, deployed 41 resources including CloudFront, API Gateway, Lambda, DynamoDB, and S3 | 25,000 |
+| 2 | Fix S3 bucket policy misconfiguration | Identified that the bucket policy granted `s3:ListBucket` instead of `s3:GetObject`, preventing CloudFront from serving static files. Fixed the IAM action and redeployed | 25,000 |
+| 3 | Restore infrastructure after crash | Detected via `terraform plan` that API Gateway resources were deleted outside of Terraform. Ran `terraform apply` to reconcile drift and restore the full deployment | 25,000+ |
+| 4 | Terraform knowledge questions | Answered correctly: `terraform fmt` is the standard formatting method | Bonus |
+
+**Final Score (HashiCafe): 120,755 points**
+
+### Architecture Deployed
+
+```
+CloudFront CDN ──> S3 Static Website (index.html, CSS, images)
+                        │
+                        ├── API Gateway (REST) ──> Lambda (barista) ──> DynamoDB (coffee menu)
+                        │
+                        └── Lambda (supplier) ──> DynamoDB (seeds coffee data)
+```
+
+**AWS Services Used:** S3, CloudFront, API Gateway, Lambda, DynamoDB, IAM, CloudWatch
+
+### Key Takeaways
+
+- **Remote state is essential** for team collaboration -- always use an S3 backend with Terraform
+- **Terraform detects infrastructure drift** -- if someone manually deletes AWS resources, `terraform plan` catches it and `terraform apply` restores desired state
+- **IAM policy actions matter** -- `s3:ListBucket` vs `s3:GetObject` is the difference between a working site and "Access Denied"
+- **CloudFront deployments take time** -- expect 3-5 minutes for CDN distribution creation
+
+---
 
 ## References
 
