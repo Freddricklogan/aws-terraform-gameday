@@ -1,5 +1,8 @@
 # AWS Terraform Infrastructure -- Game Day
 
+**[Live overview &amp; docs](https://freddricklogan.github.io/aws-terraform-gameday/)** &nbsp;|&nbsp; [Portfolio](https://fredlogan.phd) &nbsp;|&nbsp; [All Projects](https://freddricklogan.github.io/projects/)
+
+
 ## Three-Tier Web Application on AWS with Terraform
 
 This repository contains Terraform Infrastructure as Code (IaC) for deploying a complete three-tier web application on AWS. Built for the **AWS & HashiCorp Terraform Game Day** (March 13, 2026) at Illinois Institute of Technology.
