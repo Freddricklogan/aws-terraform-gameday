@@ -66,6 +66,10 @@ resource "aws_s3_bucket_versioning" "access_logs" {
   }
 }
 
+# ALB access log delivery supports SSE-S3 (AES256) only. A customer-managed
+# KMS key makes the delivery fail silently, which is worse than the finding.
+# Same reason as the checkov:skip=CKV_AWS_145 annotation below.
+#trivy:ignore:AVD-AWS-0132
 resource "aws_s3_bucket_server_side_encryption_configuration" "access_logs" {
   # checkov:skip=CKV_AWS_145:ALB access log delivery supports SSE-S3 (AES256) only; a customer-managed KMS key causes the delivery to fail silently.
   bucket = aws_s3_bucket.access_logs.id
@@ -252,6 +256,11 @@ resource "aws_iam_role_policy" "flow_logs" {
 # -----------------------------------------------------------------------------
 # Alarm topic
 # -----------------------------------------------------------------------------
+# The topic carries CloudWatch alarm notifications -- resource names and
+# metric states, no credentials or personal data. The AWS-managed key
+# (alias/aws/sns) encrypts at rest without adding a CMK the facilitator
+# would have to create, rotate and pay for to run a one-day lab.
+#trivy:ignore:AVD-AWS-0136
 resource "aws_sns_topic" "alarms" {
   name              = "${var.name_prefix}-alarms"
   kms_master_key_id = "alias/aws/sns"

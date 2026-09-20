@@ -95,6 +95,12 @@ resource "aws_vpc_security_group_ingress_rule" "app_from_alb" {
 
 # --- App egress: HTTPS + HTTP for package installs through the NAT gateway ---
 # Note: no port 22 anywhere. Operator access is Session Manager (see compute).
+# Instances sit in private subnets and reach package repositories and
+# AWS API endpoints through the NAT gateway. The destination set is the
+# public internet by nature; restricting it would require VPC endpoints
+# for every service plus a mirrored apt source, which is out of scope for
+# a game-day lab. Port is limited to 443 and the rule is egress-only.
+#trivy:ignore:AVD-AWS-0104
 resource "aws_vpc_security_group_egress_rule" "app_https" {
   security_group_id = aws_security_group.app.id
   description       = "Package repositories and AWS API endpoints over TLS"
@@ -104,6 +110,10 @@ resource "aws_vpc_security_group_egress_rule" "app_https" {
   ip_protocol       = "tcp"
 }
 
+# Ubuntu archive mirrors still serve plain HTTP; package integrity comes
+# from the signed repository metadata, not the transport. Egress-only,
+# port 80, from private subnets via NAT.
+#trivy:ignore:AVD-AWS-0104
 resource "aws_vpc_security_group_egress_rule" "app_http" {
   security_group_id = aws_security_group.app.id
   description       = "Ubuntu archive mirrors that still serve plain HTTP with signed packages"
@@ -116,6 +126,10 @@ resource "aws_vpc_security_group_egress_rule" "app_http" {
 # -----------------------------------------------------------------------------
 # Load balancer
 # -----------------------------------------------------------------------------
+# This load balancer is deliberately internet-facing -- it is the single
+# public entry point of the stack, and the reason the application tier
+# can stay private. Ingress is confined to var.ingress_cidrs.
+#trivy:ignore:AVD-AWS-0053
 resource "aws_lb" "this" {
   # checkov:skip=CKV_AWS_150:Deletion protection is var.enable_deletion_protection, default false so that `make destroy` ends a Game Day at zero cost. Set it to true for any long-lived environment.
   # checkov:skip=CKV2_AWS_28:No WAF in front of this ALB. Accepted, documented residual risk for a teaching stack with no user data; see AUDIT.md "Residual risks".
@@ -198,6 +212,11 @@ resource "aws_lb_listener" "https" {
 }
 
 # Port 80: a redirect when TLS is on, the service listener when it is not.
+# The HTTP listener exists to redirect to HTTPS whenever an ACM certificate
+# is supplied (see the redirect block below). With no certificate the lab
+# profile serves plain HTTP on purpose; production use supplies
+# var.certificate_arn and every request is redirected to 443.
+#trivy:ignore:AVD-AWS-0054
 resource "aws_lb_listener" "http" {
   # checkov:skip=CKV_AWS_2:Without an ACM certificate this training stack serves HTTP; set var.certificate_arn and this listener becomes a 301 redirect to HTTPS.
   # checkov:skip=CKV_AWS_103:TLS policy is enforced on the HTTPS listener, which only exists when a certificate is supplied.
