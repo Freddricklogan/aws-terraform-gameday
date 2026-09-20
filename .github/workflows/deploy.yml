@@ -135,6 +135,10 @@ jobs:
           skip-dirs: challenges,solutions
           format: sarif
           output: trivy.sarif
+          # Without this the action builds the SARIF "with all severities" and the
+          # exit code then fires on LOW/MEDIUM findings, ignoring the severity
+          # filter declared above. This makes the gate match the stated policy.
+          limit-severities-for-sarif: true
 
       - name: Upload trivy SARIF
         if: always()
