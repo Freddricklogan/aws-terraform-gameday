@@ -13,7 +13,7 @@
 resource "aws_vpc" "challenge6" {
   cidr_block           = "10.1.0.0/16"
   enable_dns_hostnames = true
-  tags = { Name = "challenge-06" }
+  tags                 = { Name = "challenge-06" }
 }
 
 # --- Subnet ---
@@ -22,7 +22,7 @@ resource "aws_subnet" "challenge6_a" {
   cidr_block              = "10.1.0.0/24"
   availability_zone       = "us-east-2a"
   map_public_ip_on_launch = true
-  tags = { Name = "challenge-06-a" }
+  tags                    = { Name = "challenge-06-a" }
 }
 
 resource "aws_subnet" "challenge6_b" {
@@ -30,7 +30,7 @@ resource "aws_subnet" "challenge6_b" {
   cidr_block              = "10.1.16.0/24"
   availability_zone       = "us-east-2b"
   map_public_ip_on_launch = true
-  tags = { Name = "challenge-06-b" }
+  tags                    = { Name = "challenge-06-b" }
 }
 
 # --- Internet Gateway ---
@@ -90,7 +90,7 @@ resource "aws_launch_template" "challenge6" {
 
   tag_specifications {
     resource_type = "instance"
-    tags = { Name = "challenge-06" }
+    tags          = { Name = "challenge-06" }
   }
 }
 

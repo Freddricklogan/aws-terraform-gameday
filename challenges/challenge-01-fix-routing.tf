@@ -12,7 +12,7 @@
 resource "aws_vpc" "challenge1" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
-  tags = { Name = "challenge-01" }
+  tags                 = { Name = "challenge-01" }
 }
 
 # This subnet is correct
@@ -21,7 +21,7 @@ resource "aws_subnet" "challenge1" {
   cidr_block              = "10.0.0.0/24"
   availability_zone       = "us-east-2a"
   map_public_ip_on_launch = true
-  tags = { Name = "challenge-01" }
+  tags                    = { Name = "challenge-01" }
 }
 
 # This gateway is correct
