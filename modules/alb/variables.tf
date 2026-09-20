@@ -115,6 +115,12 @@ variable "enable_deletion_protection" {
   default     = false
 }
 
+variable "enable_alarms" {
+  type        = bool
+  description = "Explicitly enable or disable the CloudWatch alarms. Leave null to derive from alarm_topic_arn. The root module sets this so that count depends only on plan-time-known input, never on an apply-time attribute."
+  default     = null
+}
+
 variable "alarm_topic_arn" {
   type        = string
   description = "SNS topic CloudWatch alarms publish to. Empty string disables alarms."

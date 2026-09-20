@@ -29,7 +29,7 @@ locals {
 
   nat_gateway_count = var.enable_nat_gateway ? (var.single_nat_gateway ? 1 : var.az_count) : 0
 
-  enable_flow_logs = var.flow_log_destination_arn != "" && var.flow_log_role_arn != ""
+  enable_flow_logs = var.enable_flow_logs != null ? var.enable_flow_logs : (var.flow_log_destination_arn != "" && var.flow_log_role_arn != "")
 }
 
 # -----------------------------------------------------------------------------

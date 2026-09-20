@@ -11,7 +11,7 @@
 locals {
   https_enabled = var.certificate_arn != ""
   listener_port = local.https_enabled ? 443 : 80
-  alarms_on     = var.alarm_topic_arn != ""
+  alarms_on     = var.enable_alarms != null ? var.enable_alarms : var.alarm_topic_arn != ""
 }
 
 # -----------------------------------------------------------------------------

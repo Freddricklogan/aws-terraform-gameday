@@ -26,4 +26,5 @@ output "instance_role_arn" {
 output "ami_id" {
   description = "AMI the launch template resolves to."
   value       = data.aws_ssm_parameter.ubuntu_ami.value
+  sensitive   = true
 }

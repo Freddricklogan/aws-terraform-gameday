@@ -241,6 +241,18 @@ variable "access_log_expiration_days" {
   }
 }
 
+variable "enable_flow_logs" {
+  type        = bool
+  description = "Create VPC flow logs. Known at plan time so that count does not depend on an apply-time attribute."
+  default     = true
+}
+
+variable "enable_alarms" {
+  type        = bool
+  description = "Create the ALB CloudWatch alarms. Known at plan time so that count does not depend on an apply-time attribute."
+  default     = true
+}
+
 variable "alarm_email" {
   type        = string
   description = "Optional email address subscribed to the alarm topic."

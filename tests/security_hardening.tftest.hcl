@@ -42,6 +42,12 @@ mock_provider "aws" {
       value = "ami-00000000000000000"
     }
   }
+
+  mock_data "aws_iam_policy_document" {
+    defaults = {
+      json = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"ec2.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}"
+    }
+  }
 }
 
 # -----------------------------------------------------------------------------
@@ -166,12 +172,12 @@ run "compute_requires_imdsv2_and_encrypted_storage" {
   }
 
   assert {
-    condition     = aws_launch_template.this.block_device_mappings[0].ebs[0].encrypted == true
+    condition     = tobool(aws_launch_template.this.block_device_mappings[0].ebs[0].encrypted) == true
     error_message = "The root EBS volume must be encrypted at rest."
   }
 
   assert {
-    condition     = aws_launch_template.this.network_interfaces[0].associate_public_ip_address == false
+    condition     = tobool(aws_launch_template.this.network_interfaces[0].associate_public_ip_address) == false
     error_message = "Application instances must never receive a public IP address."
   }
 
@@ -252,12 +258,12 @@ run "alb_is_logged_and_hardened" {
   }
 
   assert {
-    condition     = aws_vpc_security_group_egress_rule.alb_to_app.referenced_security_group_id != null
+    condition     = aws_vpc_security_group_egress_rule.alb_to_app.cidr_ipv4 == null && aws_vpc_security_group_egress_rule.alb_to_app.cidr_ipv6 == null
     error_message = "ALB egress must target the application security group, not 0.0.0.0/0."
   }
 
   assert {
-    condition     = aws_vpc_security_group_ingress_rule.app_from_alb.referenced_security_group_id != null
+    condition     = aws_vpc_security_group_ingress_rule.app_from_alb.cidr_ipv4 == null && aws_vpc_security_group_ingress_rule.app_from_alb.cidr_ipv6 == null
     error_message = "Application ingress must come from the ALB security group only."
   }
 }

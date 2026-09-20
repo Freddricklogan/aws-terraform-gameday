@@ -66,3 +66,9 @@ variable "flow_log_role_arn" {
   description = "IAM role ARN that grants the VPC flow log service permission to write to CloudWatch Logs."
   default     = ""
 }
+
+variable "enable_flow_logs" {
+  type        = bool
+  description = "Explicitly enable or disable VPC flow logs. Leave null to derive from flow_log_destination_arn/flow_log_role_arn. The root module sets this so that count depends only on plan-time-known input, never on an apply-time attribute."
+  default     = null
+}

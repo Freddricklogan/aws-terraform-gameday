@@ -49,6 +49,7 @@ module "network" {
 
   flow_log_destination_arn = module.observability.flow_log_group_arn
   flow_log_role_arn        = module.observability.flow_log_role_arn
+  enable_flow_logs         = var.enable_flow_logs
 }
 
 module "alb" {
@@ -65,6 +66,7 @@ module "alb" {
   access_logs_bucket = module.observability.access_logs_bucket
   access_logs_prefix = module.observability.access_logs_prefix
   alarm_topic_arn    = module.observability.alarm_topic_arn
+  enable_alarms      = var.enable_alarms
 
   health_check_path          = "/healthz"
   enable_deletion_protection = var.enable_deletion_protection

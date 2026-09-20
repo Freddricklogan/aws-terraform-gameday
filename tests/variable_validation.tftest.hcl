@@ -45,6 +45,12 @@ mock_provider "aws" {
       value = "ami-00000000000000000"
     }
   }
+
+  mock_data "aws_iam_policy_document" {
+    defaults = {
+      json = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"ec2.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}"
+    }
+  }
 }
 
 # --- Region ------------------------------------------------------------------
