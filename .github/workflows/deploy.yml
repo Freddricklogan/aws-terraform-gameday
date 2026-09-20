@@ -1,0 +1,298 @@
+name: CI/CD
+
+# Two independent paths:
+#
+#   PR / push to main : lint -> test -> security-scan -> pages (docs/)
+#                       No AWS credentials are used or required anywhere on
+#                       this path, so the repository is fully verifiable by
+#                       anyone who forks it.
+#
+#   workflow_dispatch : plan -> apply, both gated on the "aws-lab" environment
+#                       and both assuming a role through OIDC. These are the
+#                       only jobs that touch an AWS account, and they only ever
+#                       run when a human starts them by hand.
+#
+# There are no long-lived AWS keys anywhere in this workflow. The AWS steps
+# assume a role through GitHub's OIDC provider, which is why every AWS job
+# requests `id-token: write`. Configure the role ARN as the repository
+# variable AWS_ROLE_ARN (Settings -> Secrets and variables -> Actions ->
+# Variables) and trust it from
+# arn:aws:iam::<ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com
+# with a condition on `repo:Freddricklogan/aws-terraform-gameday:*`.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TF_VERSION: "1.14.6"
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  AWS_REGION: us-east-2
+
+jobs:
+  # ---------------------------------------------------------------------------
+  lint:
+    name: lint (fmt, validate, tflint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      # challenges/ is intentionally broken teaching material and is excluded
+      # from every check in this job.
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive -diff . modules tests
+
+      - name: terraform init (no backend)
+        run: terraform init -backend=false
+
+      - name: terraform validate
+        run: terraform validate -no-color
+
+      - name: Validate each module in isolation
+        run: |
+          set -euo pipefail
+          for dir in modules/*/; do
+            echo "::group::$dir"
+            terraform -chdir="$dir" init -backend=false
+            terraform -chdir="$dir" validate -no-color
+            echo "::endgroup::"
+          done
+
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.53.0
+
+      - name: tflint
+        run: |
+          tflint --init
+          tflint --recursive --minimum-failure-severity=warning
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  test:
+    name: test (terraform test, mocked providers)
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: terraform init (no backend)
+        run: terraform init -backend=false
+
+      # No credentials are configured for this job on purpose: the tests use
+      # mock_provider and must never be able to reach AWS.
+      - name: terraform test
+        run: terraform test -no-color -verbose
+
+  # ---------------------------------------------------------------------------
+  security-scan:
+    name: security-scan (checkov, trivy)
+    runs-on: ubuntu-latest
+    needs: lint
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install checkov
+        run: pip install --disable-pip-version-check "checkov==3.2.334"
+
+      - name: checkov
+        run: checkov --directory . --config-file .checkov.yaml --output cli --output sarif --output-file-path console,checkov.sarif
+
+      - name: Upload checkov SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov.sarif
+          category: checkov
+
+      - name: trivy config
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          skip-dirs: challenges,solutions
+          format: sarif
+          output: trivy.sarif
+          # Without this the action builds the SARIF "with all severities" and the
+          # exit code then fires on LOW/MEDIUM findings, ignoring the severity
+          # filter declared above. This makes the gate match the stated policy.
+          limit-severities-for-sarif: true
+
+      - name: Upload trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
+
+  # ---------------------------------------------------------------------------
+  plan:
+    name: plan (manual, aws-lab)
+    runs-on: ubuntu-latest
+    needs: [test, security-scan]
+    # Manual only. A pull request cannot reach an AWS account from this repo.
+    if: github.event_name == 'workflow_dispatch'
+    environment:
+      name: aws-lab
+    permissions:
+      contents: read
+      id-token: write # OIDC: the only credential mechanism used here
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      # Replace vars.AWS_ROLE_ARN with your read-only plan role.
+      # Placeholder shape: arn:aws:iam::<ACCOUNT_ID>:role/<GITHUB_OIDC_PLAN_ROLE>
+      - name: Assume AWS role via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: gameday-plan-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: terraform init
+        run: terraform init
+
+      - name: terraform plan
+        id: plan
+        run: |
+          terraform plan -no-color -out=tfplan.binary -var-file=terraform.tfvars \
+            | tee plan.txt
+          terraform show -json tfplan.binary > tfplan.json
+
+      - name: Plan summary
+        run: |
+          {
+            echo '### Terraform plan'
+            echo '```hcl'
+            head -c 60000 plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # --- Cost estimation (optional, disabled by default) -------------------
+      # Infracost turns "this PR adds a NAT gateway" into a dollar figure on
+      # the pull request before anyone approves it. It needs a free API key
+      # stored as the repository secret INFRACOST_API_KEY. Uncomment both
+      # steps to enable; they are inert while commented out.
+      #
+      # - name: Setup Infracost
+      #   uses: infracost/actions/setup@v3
+      #   with:
+      #     api-key: ${{ secrets.INFRACOST_API_KEY }}
+      #
+      # - name: Infracost diff
+      #   run: |
+      #     infracost breakdown --path=tfplan.json \
+      #       --format=json --out-file=/tmp/infracost.json
+      #     infracost comment github --path=/tmp/infracost.json \
+      #       --repo=$GITHUB_REPOSITORY --pull-request=${{ github.event.pull_request.number }} \
+      #       --github-token=${{ secrets.GITHUB_TOKEN }} --behavior=update
+
+      - name: Upload plan artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ github.run_id }}
+          path: |
+            tfplan.binary
+            tfplan.json
+          retention-days: 5
+
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: apply (manual, aws-lab)
+    runs-on: ubuntu-latest
+    needs: [plan]
+    # Manual only, and only after plan has run in the same dispatch.
+    if: github.event_name == 'workflow_dispatch'
+    # The environment gate: configure Settings -> Environments -> "aws-lab"
+    # with a required reviewer. The job pauses here until a human approves,
+    # which is the only thing standing between a merge and real spend.
+    environment:
+      name: aws-lab
+      url: ${{ steps.apply.outputs.application_url }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Assume AWS role via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: gameday-apply-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: terraform init
+        run: terraform init
+
+      - name: terraform apply
+        id: apply
+        run: |
+          terraform apply -auto-approve -var-file=terraform.tfvars
+          echo "application_url=$(terraform output -raw application_url)" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  pages:
+    name: pages (publish docs/)
+    runs-on: ubuntu-latest
+    needs: [lint, test, security-scan]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

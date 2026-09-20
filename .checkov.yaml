@@ -1,0 +1,26 @@
+# Checkov configuration.
+#
+# Run: checkov --directory . --config-file .checkov.yaml   (or: make checkov)
+#
+# challenges/ is excluded on purpose: those files contain deliberate
+# misconfigurations used to teach, and every finding in them is the point.
+# Scan them separately with `checkov --directory challenges` during a session
+# to show learners what a scanner would have caught before the apply.
+directory:
+  - .
+
+skip-path:
+  - challenges/
+  - solutions/
+  - .terraform/
+
+framework:
+  - terraform
+
+quiet: true
+compact: true
+download-external-modules: false
+evaluate-variables: true
+
+# Findings are suppressed inline, at the resource, with a written reason --
+# never globally here. Grep for "checkov:skip=" to review every exception.

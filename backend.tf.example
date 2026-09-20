@@ -1,0 +1,48 @@
+# =============================================================================
+# Remote state backend -- EXAMPLE ONLY.
+#
+# Copy to backend.tf and fill in your own values, or pass them at init time:
+#
+#   terraform init \
+#     -backend-config="bucket=my-tfstate-bucket" \
+#     -backend-config="dynamodb_table=my-tfstate-locks"
+#
+# Why this matters (and why it was the first Game Day quest): with local
+# state, two facilitators running apply at the same time will silently
+# clobber each other's work, and the state file -- which contains resource
+# attributes you would not want in a repo -- lives on a laptop.
+#
+# Bootstrap the backend once, in a separate configuration, with:
+#   * S3 bucket: versioning ON, SSE-KMS, public access block ON,
+#     a TLS-only bucket policy, and MFA-delete if you can manage it.
+#   * DynamoDB table: partition key "LockID" (String), PAY_PER_REQUEST,
+#     point-in-time recovery ON, encryption ON.
+#
+# No real account IDs, bucket names or ARNs appear below on purpose.
+# =============================================================================
+
+terraform {
+  backend "s3" {
+    bucket = "REPLACE-ME-tfstate-<your-unique-suffix>"
+    key    = "aws-terraform-gameday/<environment>/terraform.tfstate"
+    region = "us-east-2"
+
+    encrypt = true
+
+    # Customer-managed KMS key for the state object. Optional but recommended:
+    # kms_key_id = "arn:aws:kms:us-east-2:<ACCOUNT_ID>:key/<KEY_ID>"
+
+    # State locking. On AWS provider 5.x / Terraform 1.9 this is the supported
+    # mechanism. Terraform 1.10+ additionally offers native S3 lockfiles via
+    # `use_lockfile = true`, which can replace the table once you move off 1.9.
+    dynamodb_table = "REPLACE-ME-tfstate-locks"
+
+    # In CI the workflow assumes a role via GitHub OIDC before running init,
+    # so no credentials are needed here. For a cross-account backend you can
+    # instead declare the role explicitly:
+    # assume_role = {
+    #   role_arn     = "arn:aws:iam::<ACCOUNT_ID>:role/<TERRAFORM_STATE_ROLE>"
+    #   session_name = "terraform-gameday"
+    # }
+  }
+}

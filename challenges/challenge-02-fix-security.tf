@@ -10,7 +10,7 @@
 resource "aws_security_group" "challenge2" {
   name        = "challenge-02-sg"
   description = "Web server security group"
-  vpc_id      = aws_vpc.challenge1.id  # Assumes challenge 1 VPC exists
+  vpc_id      = aws_vpc.challenge1.id # Assumes challenge 1 VPC exists
   tags        = { Name = "challenge-02" }
 }
 
@@ -32,9 +32,9 @@ resource "aws_vpc_security_group_ingress_rule" "challenge2_ssh" {
 resource "aws_vpc_security_group_ingress_rule" "challenge2_http" {
   security_group_id = aws_security_group.challenge2.id
   cidr_ipv4         = "0.0.0.0/0"
-  from_port         = 443  # BUG: Should be 80
+  from_port         = 443 # BUG: Should be 80
   ip_protocol       = "tcp"
-  to_port           = 443  # BUG: Should be 80
+  to_port           = 443 # BUG: Should be 80
 }
 
 # ============================================================

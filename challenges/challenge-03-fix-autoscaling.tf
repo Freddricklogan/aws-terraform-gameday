@@ -25,7 +25,7 @@ resource "aws_autoscaling_group" "challenge3" {
   #
   # FIX: Change "EC2" to "ELB"
   # ============================================================
-  health_check_type         = "EC2"  # BUG: Should be "ELB"
+  health_check_type         = "EC2" # BUG: Should be "ELB"
   health_check_grace_period = 300
 
   launch_template {

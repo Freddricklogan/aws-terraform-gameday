@@ -1,271 +1,89 @@
 # =============================================================================
-# Data Sources
-# Ref: https://registry.terraform.io/providers/hashicorp/aws/latest/docs
+# Root composition.
+#
+# This file wires four modules together and contains no resources of its own.
+# Read it top to bottom to understand the whole stack in about ninety seconds:
+#
+#   observability -> log sinks and the alarm topic (created first, so the
+#                    network and the ALB have somewhere to write)
+#   network       -> VPC, public subnets (ALB), private subnets (app), NAT
+#   alb           -> internet-facing load balancer, both security groups
+#   compute       -> launch template + ASG registered with the target group
 # =============================================================================
 
-# Get the latest Ubuntu AMI from Canonical
-# Data block: queries existing information, does not create resources
-data "aws_ami" "ubuntu" {
-  most_recent = true
+locals {
+  name_prefix = "${var.project}-${var.environment}"
 
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-
-  filter {
-    name   = "architecture"
-    values = ["x86_64"]
-  }
-
-  # Canonical's AWS account ID
-  owners = ["099720109477"]
+  # Applied to every taggable resource through provider default_tags.
+  common_tags = merge(
+    {
+      Project            = var.project
+      Environment        = var.environment
+      Owner              = var.owner
+      CostCenter         = var.cost_center
+      DataClassification = var.data_classification
+      ManagedBy          = "terraform"
+      Repository         = "aws-terraform-gameday"
+    },
+    var.additional_tags,
+  )
 }
 
-# Get available AZs in the region
-data "aws_availability_zones" "available" {
-  state = "available"
+module "observability" {
+  source = "./modules/observability"
+
+  name_prefix                = local.name_prefix
+  log_retention_days         = var.log_retention_days
+  access_log_expiration_days = var.access_log_expiration_days
+  alarm_email                = var.alarm_email
 }
 
-# =============================================================================
-# VPC -- Virtual Private Cloud
-# This is the networking foundation. Everything lives inside the VPC.
-# Ref: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc
-# =============================================================================
+module "network" {
+  source = "./modules/network"
 
-resource "aws_vpc" "main" {
-  cidr_block           = var.vpc_cidr
-  enable_dns_hostnames = true
-  enable_dns_support   = true
+  name_prefix        = local.name_prefix
+  vpc_cidr           = var.vpc_cidr
+  az_count           = var.az_count
+  enable_nat_gateway = var.enable_nat_gateway
+  single_nat_gateway = var.single_nat_gateway
 
-  tags = {
-    Name = var.project_tag
-  }
+  flow_log_destination_arn = module.observability.flow_log_group_arn
+  flow_log_role_arn        = module.observability.flow_log_role_arn
+  enable_flow_logs         = var.enable_flow_logs
 }
 
-# =============================================================================
-# Subnets -- Subdivisions of the VPC network
-# One subnet per availability zone for high availability
-# Ref: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet
-# =============================================================================
+module "alb" {
+  source = "./modules/alb"
 
-resource "aws_subnet" "public" {
-  count = length(var.subnet_cidrs)
+  name_prefix       = local.name_prefix
+  vpc_id            = module.network.vpc_id
+  public_subnet_ids = module.network.public_subnet_ids
 
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = var.subnet_cidrs[count.index]
-  availability_zone       = data.aws_availability_zones.available.names[count.index]
-  map_public_ip_on_launch = true
+  ingress_cidrs   = var.alb_ingress_cidrs
+  app_port        = var.app_port
+  certificate_arn = var.certificate_arn
 
-  tags = {
-    Name = "${var.project_tag}-subnet-${data.aws_availability_zones.available.names[count.index]}"
-  }
+  access_logs_bucket = module.observability.access_logs_bucket
+  access_logs_prefix = module.observability.access_logs_prefix
+  alarm_topic_arn    = module.observability.alarm_topic_arn
+  enable_alarms      = var.enable_alarms
+
+  health_check_path          = "/healthz"
+  enable_deletion_protection = var.enable_deletion_protection
 }
 
-# =============================================================================
-# Internet Gateway -- Connects VPC to the public internet
-# Without this, no traffic can leave or enter the VPC
-# Ref: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/internet_gateway
-# =============================================================================
+module "compute" {
+  source = "./modules/compute"
 
-resource "aws_internet_gateway" "gw" {
-  vpc_id = aws_vpc.main.id
+  name_prefix        = local.name_prefix
+  private_subnet_ids = module.network.private_subnet_ids
+  security_group_ids = [module.alb.app_security_group_id]
+  target_group_arn   = module.alb.target_group_arn
 
-  tags = {
-    Name = var.project_tag
-  }
-}
-
-# =============================================================================
-# Route Table -- Defines how network traffic is directed
-# Critical: forgetting to attach this is the #1 Game Day issue
-# Ref: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table
-# =============================================================================
-
-resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.main.id
-
-  # Default route: send all traffic to the internet gateway
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.gw.id
-  }
-
-  tags = {
-    Name = var.project_tag
-  }
-}
-
-# CRITICAL: Associate route table as the main route table for the VPC
-# Without this, the VPC uses the default (locked-down) route table
-resource "aws_main_route_table_association" "main" {
-  vpc_id         = aws_vpc.main.id
-  route_table_id = aws_route_table.public.id
-}
-
-# Associate route table with each subnet
-resource "aws_route_table_association" "public" {
-  count = length(var.subnet_cidrs)
-
-  subnet_id      = aws_subnet.public[count.index].id
-  route_table_id = aws_route_table.public.id
-}
-
-# =============================================================================
-# Security Group -- Firewall rules for instances
-# By default, ALL ports are blocked. You must explicitly open them.
-# IMPORTANT: Don't forget EGRESS. Ingress without egress = silent failure.
-# Ref: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group
-# =============================================================================
-
-resource "aws_security_group" "web" {
-  name        = "${var.project_tag}-sg"
-  description = "Allow SSH and HTTP inbound, all outbound"
-  vpc_id      = aws_vpc.main.id
-
-  tags = {
-    Name = var.project_tag
-  }
-}
-
-# Ingress: Allow SSH (port 22) from anywhere
-resource "aws_vpc_security_group_ingress_rule" "ssh" {
-  security_group_id = aws_security_group.web.id
-  cidr_ipv4         = "0.0.0.0/0"
-  from_port         = 22
-  ip_protocol       = "tcp"
-  to_port           = 22
-}
-
-# Ingress: Allow HTTP (port 80) from anywhere
-resource "aws_vpc_security_group_ingress_rule" "http" {
-  security_group_id = aws_security_group.web.id
-  cidr_ipv4         = "0.0.0.0/0"
-  from_port         = 80
-  ip_protocol       = "tcp"
-  to_port           = 80
-}
-
-# Egress: Allow ALL outbound traffic
-# Without this rule, responses never leave the instance
-resource "aws_vpc_security_group_egress_rule" "all_outbound" {
-  security_group_id = aws_security_group.web.id
-  cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol       = "-1"
-}
-
-# =============================================================================
-# Launch Template -- Blueprint for EC2 instances
-# Defines what each instance looks like. ASG uses this to spin up instances.
-# Ref: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/launch_template
-# =============================================================================
-
-resource "aws_launch_template" "web" {
-  name          = "${var.project_tag}-lt"
-  image_id      = data.aws_ami.ubuntu.id
-  instance_type = var.instance_type
-
-  # Bootstrap script: runs on first boot to install nginx
-  user_data = filebase64("${path.module}/install-env.sh")
-
-  # Attach the security group (firewall)
-  vpc_security_group_ids = [aws_security_group.web.id]
-
-  tag_specifications {
-    resource_type = "instance"
-    tags = {
-      Name = var.project_tag
-    }
-  }
-}
-
-# =============================================================================
-# Auto Scaling Group -- Manages instance lifecycle automatically
-# Declarative: tell it desired state, it makes it happen
-# If an instance dies, ASG launches a replacement automatically
-# Ref: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/autoscaling_group
-# =============================================================================
-
-resource "aws_autoscaling_group" "web" {
-  name = "${var.project_tag}-asg"
-
-  # Spread instances across all subnets (all AZs) for high availability
-  vpc_zone_identifier = aws_subnet.public[*].id
-
-  desired_capacity          = var.desired_capacity
-  max_size                  = var.max_size
-  min_size                  = var.min_size
-  health_check_grace_period = 300
-  health_check_type         = "ELB"
-
-  # Use the launch template to create instances
-  launch_template {
-    id      = aws_launch_template.web.id
-    version = "$Latest"
-  }
-
-  tag {
-    key                 = "Name"
-    value               = var.project_tag
-    propagate_at_launch = true
-  }
-}
-
-# =============================================================================
-# Application Load Balancer -- Distributes traffic across instances
-# This is the single public-facing entry point to the application
-# Ref: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb
-# =============================================================================
-
-resource "aws_lb" "web" {
-  name               = "${var.project_tag}-alb"
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.web.id]
-  subnets            = aws_subnet.public[*].id
-
-  tags = {
-    Name = var.project_tag
-  }
-}
-
-# Target Group -- Where instances register for health checks
-resource "aws_lb_target_group" "web" {
-  name     = "${var.project_tag}-tg"
-  port     = 80
-  protocol = "HTTP"
-  vpc_id   = aws_vpc.main.id
-
-  health_check {
-    enabled             = true
-    path                = "/"
-    port                = "traffic-port"
-    protocol            = "HTTP"
-    healthy_threshold   = 3
-    unhealthy_threshold = 3
-    timeout             = 5
-    interval            = 30
-  }
-
-  tags = {
-    Name = var.project_tag
-  }
-}
-
-# Listener -- Tells the load balancer what traffic to accept
-resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.web.arn
-  port              = 80
-  protocol          = "HTTP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.web.arn
-  }
-}
-
-# Attach ASG to the load balancer target group
-resource "aws_autoscaling_attachment" "web" {
-  autoscaling_group_name = aws_autoscaling_group.web.id
-  lb_target_group_arn    = aws_lb_target_group.web.arn
+  instance_type    = var.instance_type
+  app_port         = var.app_port
+  min_size         = var.min_size
+  max_size         = var.max_size
+  desired_capacity = var.desired_capacity
+  kms_key_arn      = var.kms_key_arn
 }
