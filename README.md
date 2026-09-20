@@ -46,6 +46,8 @@ on someone un-breaking the curriculum.
 The measured numbers above, and an explicit list of what was *not* run in this
 pass, are in [AUDIT.md](AUDIT.md).
 
+**[→ Read the full case study](docs/CASE_STUDY.md)**
+
 ---
 
 ## 2. Demonstrated Competencies & Technical Skills
