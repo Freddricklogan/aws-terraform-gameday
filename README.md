@@ -394,7 +394,8 @@ terraform init && terraform plan
 # remember to delete localstack_override.tf afterwards
 ```
 
-— or simply read the plan that CI posts as a comment on every pull request
+— or simply run the `plan` job by hand (Actions -> CI/CD -> Run workflow) and
+read the diff in the run summary
 (`deploy.yml`, job `plan`).
 
 ### What was actually verified, and what was not
