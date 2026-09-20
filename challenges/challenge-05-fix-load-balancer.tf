@@ -23,7 +23,7 @@ resource "aws_lb" "challenge5" {
   #
   # FIX: Change true to false
   # ============================================================
-  internal = true  # BUG: Should be false
+  internal = true # BUG: Should be false
 
   tags = { Name = "challenge-05" }
 }

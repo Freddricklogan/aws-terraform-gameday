@@ -1,0 +1,41 @@
+# =============================================================================
+# Copy to terraform.tfvars and edit. terraform.tfvars is git-ignored.
+# Nothing secret belongs in this file -- credentials come from SSO / OIDC.
+# =============================================================================
+
+aws_region  = "us-east-2"
+project     = "gameday"
+environment = "lab"
+
+owner               = "Freddrick Logan"
+cost_center         = "education"
+data_classification = "public"
+
+# --- Network -----------------------------------------------------------------
+vpc_cidr = "10.0.0.0/16"
+az_count = 3
+
+# One NAT gateway instead of three. Roughly a third of the NAT cost, at the
+# price of AZ independence for outbound traffic. Fine for a Game Day.
+enable_nat_gateway = true
+single_nat_gateway = true
+
+# --- Compute -----------------------------------------------------------------
+instance_type    = "t3.micro"
+min_size         = 2
+max_size         = 5
+desired_capacity = 3
+
+# --- Edge --------------------------------------------------------------------
+# Narrow this to your campus or office ranges for a closed session.
+alb_ingress_cidrs = ["0.0.0.0/0"]
+
+# Set an ACM certificate ARN to serve HTTPS and redirect port 80.
+# certificate_arn = "arn:aws:acm:us-east-2:<ACCOUNT_ID>:certificate/<CERT_ID>"
+
+enable_deletion_protection = false
+
+# --- Observability -----------------------------------------------------------
+log_retention_days         = 90
+access_log_expiration_days = 90
+# alarm_email              = "you@example.com"

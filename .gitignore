@@ -1,28 +1,48 @@
-# Terraform state files (contain sensitive data, never commit)
+# --- Terraform state: never commit ------------------------------------------
+# State contains every resource attribute, including ones you would not publish.
 *.tfstate
 *.tfstate.*
 .terraform/
-.terraform.lock.hcl
+.terraform.tfstate.lock.info
 
-# Crash logs
-crash.log
-crash.*.log
+# NOTE: .terraform.lock.hcl is deliberately NOT ignored. The dependency lock
+# file is what makes provider versions and checksums reproducible across CI and
+# every facilitator's laptop. Commit it.
 
-# Variable override files (may contain secrets)
-*.auto.tfvars
+# --- Variable files ----------------------------------------------------------
+# Ignore real tfvars, keep the committed examples.
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
 override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
 
-# Plan output files
-*.tfplan
+# --- Backend -----------------------------------------------------------------
+# backend.tf holds environment-specific bucket and table names; the committed
+# template is backend.tf.example.
+backend.tf
 
-# OS files
+# --- Plans and scanner output ------------------------------------------------
+tfplan
+tfplan.*
+*.tfplan
+plan.txt
+*.sarif
+.checkov/
+
+# --- Crash logs --------------------------------------------------------------
+crash.log
+crash.*.log
+
+# --- Tooling -----------------------------------------------------------------
+.tflint.d/
+.infracost/
+
+# --- OS and editor -----------------------------------------------------------
 .DS_Store
 Thumbs.db
-
-# IDE files
 .idea/
 .vscode/
 *.swp

@@ -1,39 +1,43 @@
-#!/bin/bash
-# Safely destroy all Game Day infrastructure
-# Run this when you're done practicing to avoid AWS charges
-set -e
+#!/usr/bin/env bash
+# =============================================================================
+# Tear down every resource in the current workspace.
+#
+# A Game Day account should end the day at zero. NAT gateways and load
+# balancers bill by the hour whether or not anyone is looking at them.
+# =============================================================================
+set -euo pipefail
+
+VAR_FILE="${VAR_FILE:-terraform.tfvars}"
 
 echo "================================================"
-echo "  AWS Terraform Game Day -- Resource Cleanup"
+echo "  AWS Terraform Game Day -- teardown"
 echo "================================================"
-echo ""
+echo
 
-# Check if terraform state exists
-if [ ! -f "terraform.tfstate" ] && [ ! -d ".terraform" ]; then
-    echo "No Terraform state found in current directory."
-    echo "Make sure you're in the aws-terraform-gameday directory."
-    exit 1
+if [ ! -d .terraform ]; then
+  echo "Not initialised in this directory. Run 'make init' first, or cd to the repo root." >&2
+  exit 1
 fi
 
-# Show what will be destroyed
-echo "Resources that will be destroyed:"
-terraform state list 2>/dev/null || true
-echo ""
+echo "Workspace: $(terraform workspace show 2>/dev/null || echo default)"
+echo
+echo "Resources currently tracked in state:"
+terraform state list 2>/dev/null || echo "  (none)"
+echo
 
-# Confirm
-read -p "Destroy all resources? This cannot be undone. (yes/no): " confirm
-if [ "$confirm" != "yes" ]; then
-    echo "Aborted."
-    exit 0
+read -r -p "Type DESTROY to tear all of this down: " confirm
+if [ "$confirm" != "DESTROY" ]; then
+  echo "Aborted. Nothing was changed."
+  exit 0
 fi
 
-echo ""
-echo "Destroying infrastructure..."
-terraform destroy -auto-approve
+terraform destroy -auto-approve -var-file="$VAR_FILE"
 
-echo ""
-echo "================================================"
-echo "  All resources destroyed."
-echo "  Verify in the AWS Console to be sure:"
-echo "  https://console.aws.amazon.com/ec2/"
-echo "================================================"
+echo
+echo "Destroy complete. Verify that nothing is left billing:"
+echo "  aws ec2 describe-nat-gateways --filter Name=state,Values=available"
+echo "  aws elbv2 describe-load-balancers --query 'LoadBalancers[].LoadBalancerName'"
+echo "  aws ec2 describe-instances --filters Name=instance-state-name,Values=running \\"
+echo "      --query 'Reservations[].Instances[].InstanceId'"
+echo
+echo "The ALB access log bucket is force_destroy = true, so its objects go with it."

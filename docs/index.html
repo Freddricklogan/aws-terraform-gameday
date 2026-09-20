@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https://img.shields.io https://github.com; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="description" content="Game Day console: a three-tier AWS stack in Terraform, with six broken-infrastructure challenges, hints and solutions.">
+<title>Game Day Console &middot; aws-terraform-gameday</title>
+<style>
+  :root {
+    --bg: #0b1220;
+    --panel: #111a2e;
+    --panel-2: #16223a;
+    --border: #22304d;
+    --text: #e6edf3;
+    --muted: #8b98b0;
+    --accent: #58A6FF;
+    --ok: #3fb950;
+    --warn: #d29922;
+    --danger: #f85149;
+    --radius: 12px;
+    --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { width: min(1120px, 100%); margin: 0 auto; padding: 0 16px; }
+
+  a { color: var(--accent); }
+  a:focus-visible, button:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* ---------- header ---------- */
+  header.site {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: rgba(11, 18, 32, 0.92);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(8px);
+  }
+  header.site .inner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+    align-items: center;
+    padding: 14px 16px;
+  }
+  .brand h1 { font-size: 1.05rem; margin: 0; letter-spacing: .01em; }
+  .brand p { margin: 2px 0 0; color: var(--muted); font-size: .84rem; }
+  .spacer { flex: 1 1 auto; }
+
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .badge {
+    font-size: .68rem;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .badge.ok { color: var(--ok); border-color: rgba(63,185,80,.45); }
+  .badge.accent { color: var(--accent); border-color: rgba(88,166,255,.45); }
+
+  .btn {
+    font: inherit;
+    font-size: .85rem;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .btn.primary { background: var(--accent); color: #07101f; border-color: var(--accent); }
+  .btn:hover { border-color: var(--accent); }
+
+  /* ---------- kpi ---------- */
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
+    margin: 24px 0 8px;
+  }
+  .kpi {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .kpi .v { font-size: 1.7rem; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .kpi .l { font-size: .74rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+
+  /* ---------- sections ---------- */
+  section { margin: 34px 0; }
+  h2 { font-size: 1.12rem; margin: 0 0 4px; }
+  h2 .num { color: var(--muted); font-weight: 400; margin-right: 8px; font-family: var(--mono); font-size: .9rem; }
+  .lede { color: var(--muted); margin: 0 0 16px; max-width: 74ch; font-size: .92rem; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+  }
+
+  figure.diagram { margin: 0; overflow-x: auto; }
+  figure.diagram svg { display: block; min-width: 720px; width: 100%; height: auto; }
+  figcaption { color: var(--muted); font-size: .8rem; margin-top: 10px; }
+
+  /* ---------- challenges ---------- */
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .chip {
+    font: inherit; font-size: .78rem; cursor: pointer;
+    padding: 5px 12px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--muted);
+  }
+  .chip[aria-pressed="true"] { color: var(--text); border-color: var(--accent); background: rgba(88,166,255,.12); }
+
+  ol.challenges { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  .challenge {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel-2);
+    padding: 14px 16px;
+  }
+  .challenge header { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; }
+  .challenge h3 { margin: 0; font-size: .97rem; }
+  .challenge .meta { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+  .pill {
+    font-size: .68rem; text-transform: uppercase; letter-spacing: .06em;
+    padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted);
+  }
+  .pill.beginner { color: var(--ok); border-color: rgba(63,185,80,.45); }
+  .pill.intermediate { color: var(--warn); border-color: rgba(210,153,34,.45); }
+  .pill.advanced { color: var(--danger); border-color: rgba(248,81,73,.45); }
+  .challenge p.scenario { margin: 8px 0 12px; color: var(--muted); font-size: .88rem; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .hint {
+    margin-top: 12px; padding: 12px 14px; border-radius: 8px;
+    border: 1px dashed var(--border); background: rgba(88,166,255,.06); font-size: .87rem;
+  }
+  .hint[hidden] { display: none; }
+  .hint strong { color: var(--accent); }
+  .hint ul { margin: 6px 0 0 18px; padding: 0; }
+
+  /* ---------- controls table ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: .74rem; text-transform: uppercase; letter-spacing: .07em; }
+  td code { font-family: var(--mono); font-size: .82rem; color: var(--accent); }
+
+  /* ---------- tour ---------- */
+  .tour-backdrop {
+    position: fixed; inset: 0; background: rgba(4, 8, 16, .72);
+    display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 60;
+  }
+  .tour-backdrop[hidden] { display: none; }
+  .tour-card {
+    width: min(540px, 100%); background: var(--panel); border: 1px solid var(--accent);
+    border-radius: var(--radius); padding: 22px;
+  }
+  .tour-card h3 { margin: 0 0 6px; font-size: 1.05rem; color: var(--accent); }
+  .tour-card p { margin: 0 0 16px; font-size: .92rem; color: var(--text); }
+  .tour-foot { display: flex; align-items: center; gap: 10px; }
+  .tour-foot .count { color: var(--muted); font-size: .8rem; font-family: var(--mono); }
+  .highlight {
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
+    border-radius: var(--radius);
+    transition: outline-color .2s ease;
+  }
+
+  footer.site {
+    border-top: 1px solid var(--border);
+    margin-top: 48px; padding: 22px 0 36px;
+    color: var(--muted); font-size: .84rem;
+  }
+  footer.site a { color: var(--muted); }
+
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .001ms !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+  }
+
+  @media (max-width: 640px) {
+    .challenge .meta { margin-left: 0; }
+    header.site .inner { padding: 12px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<a class="sr-only" href="#main">Skip to content</a>
+
+<header class="site">
+  <div class="inner wrap">
+    <div class="brand">
+      <h1>Game Day Console</h1>
+      <p>Three-tier AWS stack in Terraform &middot; six broken-infrastructure challenges</p>
+    </div>
+    <div class="spacer"></div>
+    <div class="badges">
+      <span class="badge accent">Terraform &ge; 1.9</span>
+      <span class="badge accent">AWS provider ~&gt; 5.x</span>
+      <span class="badge ok">IMDSv2 required</span>
+      <span class="badge ok">Flow logs + ALB logs</span>
+      <span class="badge">MIT</span>
+    </div>
+    <button class="btn primary" id="tour-start" type="button">Take the 30-second tour</button>
+    <a class="btn" href="https://github.com/Freddricklogan/aws-terraform-gameday">GitHub</a>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+
+  <section class="kpis" id="kpis" aria-label="Repository at a glance">
+    <div class="kpi"><div class="v" id="kpi-challenges">&ndash;</div><div class="l">Challenges</div></div>
+    <div class="kpi"><div class="v" id="kpi-bugs">&ndash;</div><div class="l">Planted defects</div></div>
+    <div class="kpi"><div class="v" id="kpi-modules">&ndash;</div><div class="l">Terraform modules</div></div>
+    <div class="kpi"><div class="v" id="kpi-controls">&ndash;</div><div class="l">Security controls</div></div>
+    <div class="kpi"><div class="v" id="kpi-minutes">&ndash;</div><div class="l">Minutes of content</div></div>
+  </section>
+
+  <section id="architecture">
+    <h2><span class="num">01</span>Architecture</h2>
+    <p class="lede">
+      The internet reaches exactly one thing: an Application Load Balancer sitting in public
+      subnets. Everything that runs application code lives in private subnets with no public IP
+      and no inbound path except the load balancer's security group. Logs and state sit in a
+      third boundary that neither of the other two can read from.
+    </p>
+    <div class="panel">
+      <figure class="diagram">
+        <svg viewBox="0 0 980 470" role="img" aria-labelledby="diagram-title diagram-desc">
+          <title id="diagram-title">Three-tier AWS topology with four trust boundaries</title>
+          <desc id="diagram-desc">
+            Public internet clients reach an Application Load Balancer in public subnets over TCP 443
+            or 80. The load balancer forwards to an Auto Scaling group of nginx instances in private
+            subnets over TCP 80, permitted only by security group reference. Instances reach the
+            internet outbound through a NAT gateway. The load balancer writes access logs to S3, the
+            VPC writes flow logs to CloudWatch, and Terraform state is held in S3 with DynamoDB locking.
+          </desc>
+
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#58A6FF"></path>
+            </marker>
+            <marker id="arrow-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b98b0"></path>
+            </marker>
+          </defs>
+
+          <!-- boundary: public internet -->
+          <rect x="14" y="40" width="190" height="150" rx="10" fill="#3a1f1f" stroke="#f85149" stroke-dasharray="6 4"></rect>
+          <text x="26" y="62" fill="#f85149" font-size="11" font-family="monospace">Trust Boundary</text>
+          <text x="26" y="76" fill="#f85149" font-size="11" font-family="monospace">Public Internet</text>
+          <rect x="34" y="94" width="150" height="70" rx="8" fill="#1f2a44" stroke="#58A6FF"></rect>
+          <text x="109" y="122" fill="#e6edf3" font-size="13" text-anchor="middle">Clients</text>
+          <text x="109" y="140" fill="#8b98b0" font-size="10.5" text-anchor="middle">browser / curl</text>
+
+          <!-- boundary: public subnets -->
+          <rect x="248" y="18" width="240" height="196" rx="10" fill="#14213d" stroke="#3fb950" stroke-dasharray="6 4"></rect>
+          <text x="260" y="40" fill="#3fb950" font-size="11" font-family="monospace">Trust Boundary</text>
+          <text x="260" y="54" fill="#3fb950" font-size="11" font-family="monospace">Public Subnets (ALB)</text>
+          <rect x="268" y="70" width="200" height="66" rx="8" fill="#14213d" stroke="#3fb950"></rect>
+          <text x="368" y="94" fill="#e6edf3" font-size="13" text-anchor="middle">Application LB</text>
+          <text x="368" y="112" fill="#8b98b0" font-size="10.5" text-anchor="middle">3 AZs &middot; sg-alb</text>
+          <text x="368" y="126" fill="#8b98b0" font-size="10.5" text-anchor="middle">drop_invalid_header_fields</text>
+          <rect x="268" y="150" width="200" height="46" rx="8" fill="#16223a" stroke="#22304d"></rect>
+          <text x="368" y="170" fill="#e6edf3" font-size="12" text-anchor="middle">NAT Gateway</text>
+          <text x="368" y="186" fill="#8b98b0" font-size="10.5" text-anchor="middle">egress only</text>
+
+          <!-- boundary: private subnets -->
+          <rect x="530" y="18" width="250" height="196" rx="10" fill="#14213d" stroke="#3fb950" stroke-dasharray="6 4"></rect>
+          <text x="542" y="40" fill="#3fb950" font-size="11" font-family="monospace">Trust Boundary</text>
+          <text x="542" y="54" fill="#3fb950" font-size="11" font-family="monospace">Private Subnets (ASG)</text>
+          <rect x="550" y="70" width="210" height="126" rx="8" fill="#14213d" stroke="#3fb950"></rect>
+          <text x="655" y="94" fill="#e6edf3" font-size="13" text-anchor="middle">Auto Scaling Group</text>
+          <text x="655" y="113" fill="#8b98b0" font-size="10.5" text-anchor="middle">nginx on Ubuntu 22.04</text>
+          <text x="655" y="130" fill="#8b98b0" font-size="10.5" text-anchor="middle">no public IP &middot; sg-app</text>
+          <text x="655" y="147" fill="#8b98b0" font-size="10.5" text-anchor="middle">IMDSv2 required, hop limit 1</text>
+          <text x="655" y="164" fill="#8b98b0" font-size="10.5" text-anchor="middle">encrypted gp3 root volume</text>
+          <text x="655" y="181" fill="#8b98b0" font-size="10.5" text-anchor="middle">SSM Session Manager, no :22</text>
+
+          <!-- boundary: data / ops -->
+          <rect x="248" y="272" width="532" height="180" rx="10" fill="#2b1d3a" stroke="#d2a8ff" stroke-dasharray="6 4"></rect>
+          <text x="260" y="294" fill="#d2a8ff" font-size="11" font-family="monospace">Trust Boundary</text>
+          <text x="260" y="308" fill="#d2a8ff" font-size="11" font-family="monospace">Data / Ops (logs, state)</text>
+          <rect x="268" y="326" width="152" height="104" rx="8" fill="#2b1d3a" stroke="#d2a8ff"></rect>
+          <text x="344" y="350" fill="#e6edf3" font-size="12" text-anchor="middle">S3 access logs</text>
+          <text x="344" y="368" fill="#8b98b0" font-size="10.5" text-anchor="middle">SSE-S3, versioned</text>
+          <text x="344" y="384" fill="#8b98b0" font-size="10.5" text-anchor="middle">public access blocked</text>
+          <text x="344" y="400" fill="#8b98b0" font-size="10.5" text-anchor="middle">TLS-only policy</text>
+          <text x="344" y="416" fill="#8b98b0" font-size="10.5" text-anchor="middle">90-day expiry</text>
+
+          <rect x="436" y="326" width="152" height="104" rx="8" fill="#2b1d3a" stroke="#d2a8ff"></rect>
+          <text x="512" y="350" fill="#e6edf3" font-size="12" text-anchor="middle">CloudWatch</text>
+          <text x="512" y="368" fill="#8b98b0" font-size="10.5" text-anchor="middle">VPC flow logs (ALL)</text>
+          <text x="512" y="384" fill="#8b98b0" font-size="10.5" text-anchor="middle">ALB 5xx alarm</text>
+          <text x="512" y="400" fill="#8b98b0" font-size="10.5" text-anchor="middle">unhealthy host alarm</text>
+          <text x="512" y="416" fill="#8b98b0" font-size="10.5" text-anchor="middle">&rarr; SNS (KMS)</text>
+
+          <rect x="604" y="326" width="156" height="104" rx="8" fill="#2b1d3a" stroke="#d2a8ff"></rect>
+          <text x="682" y="350" fill="#e6edf3" font-size="12" text-anchor="middle">Terraform state</text>
+          <text x="682" y="368" fill="#8b98b0" font-size="10.5" text-anchor="middle">S3, encrypted</text>
+          <text x="682" y="384" fill="#8b98b0" font-size="10.5" text-anchor="middle">DynamoDB lock</text>
+          <text x="682" y="400" fill="#8b98b0" font-size="10.5" text-anchor="middle">CI assumes role</text>
+          <text x="682" y="416" fill="#8b98b0" font-size="10.5" text-anchor="middle">via GitHub OIDC</text>
+
+          <!-- edges -->
+          <line x1="184" y1="118" x2="262" y2="100" stroke="#58A6FF" stroke-width="1.8" marker-end="url(#arrow)"></line>
+          <text x="196" y="96" fill="#58A6FF" font-size="10">TCP 443 &middot; TLS 1.2+</text>
+          <text x="196" y="108" fill="#8b98b0" font-size="10">80 &rarr; 301 redirect</text>
+
+          <line x1="468" y1="100" x2="544" y2="100" stroke="#58A6FF" stroke-width="1.8" marker-end="url(#arrow)"></line>
+          <text x="448" y="84" fill="#58A6FF" font-size="10">TCP 80 &middot; sg-ref only</text>
+
+          <line x1="550" y1="182" x2="470" y2="176" stroke="#8b98b0" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow-muted)"></line>
+          <text x="452" y="206" fill="#8b98b0" font-size="10">egress 80/443 &rarr; NAT</text>
+
+          <line x1="368" y1="196" x2="368" y2="320" stroke="#d2a8ff" stroke-width="1.5" marker-end="url(#arrow)"></line>
+          <text x="128" y="262" fill="#d2a8ff" font-size="10">ALB access logs (bucket policy + TLS-only)</text>
+
+          <line x1="655" y1="196" x2="560" y2="320" stroke="#d2a8ff" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow)"></line>
+          <text x="600" y="250" fill="#d2a8ff" font-size="10">flow logs &middot; metrics</text>
+        </svg>
+      </figure>
+      <figcaption>
+        Four trust boundaries. The only unauthenticated edge is the load balancer listener;
+        every other hop is permitted by security group reference, an IAM role, or a bucket policy.
+      </figcaption>
+    </div>
+  </section>
+
+  <section id="challenges">
+    <h2><span class="num">02</span>Challenges</h2>
+    <p class="lede">
+      Each challenge is a Terraform file with deliberate defects and a symptom instead of an error
+      message. Reveal the hint only when a team is genuinely stuck; the solution file explains the
+      root cause and the lesson. Scoring is in the facilitator guide.
+    </p>
+
+    <div class="filters" role="group" aria-label="Filter challenges by difficulty">
+      <button class="chip" type="button" data-filter="all" aria-pressed="true">All</button>
+      <button class="chip" type="button" data-filter="beginner" aria-pressed="false">Beginner</button>
+      <button class="chip" type="button" data-filter="intermediate" aria-pressed="false">Intermediate</button>
+      <button class="chip" type="button" data-filter="advanced" aria-pressed="false">Advanced</button>
+    </div>
+
+    <ol class="challenges" id="challenge-list"></ol>
+  </section>
+
+  <section id="controls">
+    <h2><span class="num">03</span>What the refactor changed</h2>
+    <p class="lede">
+      The original configuration deployed instances into public subnets behind a security group
+      open to the world on ports 22 and 80, with no encryption, no logging and no state locking.
+      These are the controls that replaced it.
+    </p>
+    <div class="panel">
+      <table>
+        <caption class="sr-only">Security controls introduced by the refactor</caption>
+        <thead>
+          <tr><th scope="col">Control</th><th scope="col">Where</th><th scope="col">Why it matters</th></tr>
+        </thead>
+        <tbody id="controls-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="verify">
+    <h2><span class="num">04</span>Review it without an AWS account</h2>
+    <p class="lede">
+      Nothing on this page needs credentials, and neither does reviewing the code. The test suite
+      runs against mocked providers, so the whole security posture is checkable offline and for free.
+    </p>
+    <div class="panel">
+      <pre style="margin:0;overflow-x:auto;font-family:var(--mono);font-size:.84rem;color:var(--muted)"><code>git clone https://github.com/Freddricklogan/aws-terraform-gameday
+cd aws-terraform-gameday
+
+make init      # terraform init -backend=false
+make lint      # fmt -check, validate, tflint
+make test      # terraform test -- mocked providers, no AWS calls, no cost
+make scan      # checkov + trivy config</code></pre>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    Freddrick Logan &middot;
+    <a href="https://github.com/Freddricklogan">github.com/Freddricklogan</a> &middot;
+    <a href="https://fredlogan.phd">fredlogan.phd</a>
+  </div>
+</footer>
+
+<div class="tour-backdrop" id="tour" hidden role="dialog" aria-modal="true" aria-labelledby="tour-title">
+  <div class="tour-card">
+    <h3 id="tour-title"></h3>
+    <p id="tour-body"></p>
+    <div class="tour-foot">
+      <button class="btn" id="tour-prev" type="button">Back</button>
+      <button class="btn primary" id="tour-next" type="button">Next</button>
+      <span class="count" id="tour-count"></span>
+      <span class="spacer"></span>
+      <button class="btn" id="tour-close" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
