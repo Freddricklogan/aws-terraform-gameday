@@ -168,6 +168,7 @@
 
   /* ---------- controls table ---------- */
   table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+  .table-wrap { overflow-x: auto; }
   th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
   th { color: var(--muted); font-weight: 600; font-size: .74rem; text-transform: uppercase; letter-spacing: .07em; }
   td code { font-family: var(--mono); font-size: .82rem; color: var(--accent); }
@@ -385,6 +386,7 @@
       These are the controls that replaced it.
     </p>
     <div class="panel">
+      <div class="table-wrap">
       <table>
         <caption class="sr-only">Security controls introduced by the refactor</caption>
         <thead>
@@ -392,6 +394,7 @@
         </thead>
         <tbody id="controls-body"></tbody>
       </table>
+      </div>
     </div>
   </section>
 
