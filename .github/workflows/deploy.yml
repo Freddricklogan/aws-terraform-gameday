@@ -122,7 +122,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install checkov
-        run: pip install --disable-pip-version-check "checkov==3.2.334"
+        run: pip install --disable-pip-version-check "checkov==3.3.19"  # the version AUDIT.md and README cite: 148 passed / 0 failed / 16 skips
 
       - name: checkov
         run: checkov --directory . --config-file .checkov.yaml --output cli --output sarif --output-file-path console,checkov.sarif

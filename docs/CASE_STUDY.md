@@ -32,7 +32,7 @@ Worth knowing: the audit file lists the scanner findings accepted with inline re
 
 ## 6. Evidence
 
-Measured in continuous integration on the current main branch: `terraform validate` passes for the root and all four modules; `terraform test` reports 26 passed, 0 failed under mocked providers; Checkov reports 144 passed, 0 failed, 15 documented inline skips; tflint and Trivy run clean in the same pipeline. The audit's earlier local scan with Checkov 3.3.19 reported 148 passed, 0 failed, 16 skips — the difference is scanner version — against a baseline of 28 passed and 20 failed for the original configuration. The console page returns zero console errors in headless Chrome.
+Measured in continuous integration on the current main branch: `terraform validate` passes for the root and all four modules; `terraform test` reports 26 passed, 0 failed under mocked providers; Checkov 3.3.19 reports 148 passed, 0 failed, 16 documented inline skips; tflint and Trivy run clean in the same pipeline. (Checkov 3.2.334, pinned before, reports 144 / 0 / 15 on the same tree — checks added between versions, confirmed locally.) The original configuration scored 28 passed, 20 failed. The console page returns zero console errors in headless Chrome.
 
 ## 7. What it would take to run this in production
 
