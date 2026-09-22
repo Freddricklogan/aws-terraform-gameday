@@ -46,7 +46,10 @@ tflint: ## Lint for deprecated syntax and AWS-specific mistakes
 	tflint --init
 	tflint --recursive --minimum-failure-severity=warning
 
-lint: fmt-check validate tflint ## fmt-check + validate + tflint
+lint: fmt-check validate tflint contrast ## fmt-check + validate + tflint + console palette contrast
+
+contrast: ## WCAG AA check of the console page's palettes
+	node docs/assets/contrast-check.mjs docs/assets/theme-tokens.css
 
 test: ## Run terraform test (mocked providers, no AWS calls, no cost)
 	$(TF) test
